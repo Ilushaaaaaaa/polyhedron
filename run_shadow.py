@@ -1,6 +1,6 @@
 #!/usr/bin/env -S python3 -B
 
-from time import time
+from time import time, sleep
 from common.tk_drawer import TkDrawer
 from shadow.polyedr import Polyedr
 
@@ -11,7 +11,9 @@ try:
         print("=============================================================")
         print(f"Начало работы с полиэдром '{name}'")
         start_time = time()
-        Polyedr(f"data/{name}.geom").draw(tk)
+        p = Polyedr(f"data/{name}.geom")
+        p.calc_invisible_faces_perimeter_sum()
+        p.draw(tk)
         delta_time = time() - start_time
         print(f"Изображение полиэдра '{name}' заняло {delta_time} сек.")
         input("Hit 'Return' to continue -> ")

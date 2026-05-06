@@ -80,13 +80,27 @@ class Edge:
         x = - f0 / (f1 - f0)
         return Segment(Edge.SBEG, x) if f0 < 0.0 else Segment(x, Edge.SFIN)
 
+    @property
+    def visibility(self):
+
+
+        eps = 1e-9
+        visible_len = sum(g.fin - g.beg for g in self.gaps)
+
+        if visible_len < eps:
+            return "not_seen"
+        if visible_len > 1.0 - eps:
+            return "seen"
+        return "half_seen"
 
 class Facet:
     """ Грань полиэдра """
     # Параметры конструктора: список вершин
 
-    def __init__(self, vertexes):
+    def __init__(self, vertexes, orig_vertexes = None, edges = None):
         self.vertexes = vertexes
+        self.orig_vertexes = orig_vertexes if orig_vertexes is not None else []
+        self.edges = edges if edges is not None else []
 
     # «Вертикальна» ли грань?
     def is_vertical(self):
@@ -116,6 +130,15 @@ class Facet:
         return sum(self.vertexes, R3(0.0, 0.0, 0.0)) * \
             (1.0 / len(self.vertexes))
 
+    def proj_perimeter(self):
+        p = 0.0
+        for e in self.edges:
+            # Предполагается стандартная реализация R3 с атрибутами x, y
+            dx = e.fin.x - e.beg.x
+            dy = e.fin.y - e.beg.y
+            p += (dx * dx + dy * dy) ** 0.5
+        return p
+
 
 class Polyedr:
     """ Полиэдр """
@@ -124,40 +147,54 @@ class Polyedr:
 
     # Параметры конструктора: файл, задающий полиэдр
     def __init__(self, file):
+        # списки вершин, исходных вершин, рёбер и граней полиэдра
+        self.vertexes, self.orig_vertexes, self.edges, self.facets = [], [], [], []
+        self.edge_map = {}
 
-        # списки вершин, рёбер и граней полиэдра
-        self.vertexes, self.edges, self.facets = [], [], []
-
-        # список строк файла
+        # Читаем все строки, убираем пустые, чтобы нумерация не сбивалась
         with open(file) as f:
-            for i, line in enumerate(f):
-                if i == 0:
-                    # обрабатываем первую строку; buf - вспомогательный массив
-                    buf = line.split()
-                    # коэффициент гомотетии
-                    c = float(buf.pop(0))
-                    # углы Эйлера, определяющие вращение
-                    alpha, beta, gamma = (float(x) * pi / 180.0 for x in buf)
-                elif i == 1:
-                    # во второй строке число вершин, граней и рёбер полиэдра
-                    nv, nf, ne = (int(x) for x in line.split())
-                elif i < nv + 2:
-                    # задание всех вершин полиэдра
-                    x, y, z = (float(x) for x in line.split())
-                    self.vertexes.append(R3(x, y, z).rz(
-                        alpha).ry(beta).rz(gamma) * c)
-                else:
-                    # вспомогательный массив
-                    buf = line.split()
-                    # количество вершин очередной грани
-                    size = int(buf.pop(0))
-                    # массив вершин этой грани
-                    vertexes = list(self.vertexes[int(n) - 1] for n in buf)
-                    # задание рёбер грани
-                    for n in range(size):
-                        self.edges.append(Edge(vertexes[n - 1], vertexes[n]))
-                    # задание самой грани
-                    self.facets.append(Facet(vertexes))
+            lines = [line.strip() for line in f if line.strip()]
+
+        # 1. Первая строка: коэффициент гомотетии и углы Эйлера
+        buf = lines[0].split()
+        c = float(buf.pop(0))
+        alpha, beta, gamma = (float(x) * pi / 180.0 for x in buf)
+
+        # 2. Вторая строка: число вершин, граней и рёбер
+        nv, nf, ne = (int(x) for x in lines[1].split())
+
+        # 3. Задание всех вершин полиэдра
+        for line in lines[2:2 + nv]:
+            x, y, z = (float(x) for x in line.split())
+            # Исходные координаты (БЕЗ трансформации) для проверки сферы
+            self.orig_vertexes.append(R3(x, y, z))
+            # Преобразованные координаты для отрисовки и расчёта теней
+            self.vertexes.append(R3(x, y, z).rz(alpha).ry(beta).rz(gamma) * c)
+
+        # 4. Задание граней и рёбер
+        for line in lines[2 + nv:]:
+            buf = line.split()
+            size = int(buf.pop(0))
+            # массив индексов вершин этой грани (0-based)
+            v_indices = [int(n) - 1 for n in buf]
+
+            # массивы точек вершин (преобразованных и исходных)
+            facet_verts = [self.vertexes[i] for i in v_indices]
+            orig_facet_verts = [self.orig_vertexes[i] for i in v_indices]
+
+            facet_edges = []
+            for k in range(size):
+                i1, i2 = v_indices[k - 1], v_indices[k]
+                # Ключ ребра не зависит от порядка вершин: (0,1) == (1,0)
+                key = tuple(sorted((i1, i2)))
+                if key not in self.edge_map:
+                    new_edge = Edge(self.vertexes[i1], self.vertexes[i2])
+                    self.edge_map[key] = new_edge
+                    self.edges.append(new_edge)
+                facet_edges.append(self.edge_map[key])
+
+            # задание самой грани (передаём оба списка вершин + рёбра)
+            self.facets.append(Facet(facet_verts, orig_facet_verts, facet_edges))
 
     # Метод изображения полиэдра
     def draw(self, tk):  # pragma: no cover
@@ -167,3 +204,29 @@ class Polyedr:
                 e.shadow(f)
             for s in e.gaps:
                 tk.draw_line(e.r3(s.beg), e.r3(s.fin))
+
+    # Метод вычисления требуемой характеристики
+    def calc_invisible_faces_perimeter_sum(self):
+        """
+        Сумма периметров проекций «граней с полностью невидимыми рёбрами»,
+        центр которых находится строго внутри сферы x^2+y^2+z^2 < 4
+        """
+        # 1. Сброс и расчёт теней для всех рёбер
+        for e in self.edges:
+            e.gaps = [Segment(Edge.SBEG, Edge.SFIN)]  # обязательный сброс просветов
+            for f in self.facets:
+                e.shadow(f)
+
+        total_perim = 0.0
+        for facet in self.facets:
+            # Проверяем, что все рёбра грани полностью невидимы
+            if all(e.visibility == "not_seen" for e in facet.edges):
+                # Центр грани считаем по ИСХОДНЫМ координатам (до гомотетии и поворота)
+                c = sum(facet.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(facet.orig_vertexes))
+
+                # Проверка строгого попадания в сферу радиуса 2 (r^2 < 4)
+                if c.dot(c) < 4.0:
+                    total_perim += facet.proj_perimeter()
+
+        print(f"Сумма периметров проекций: {total_perim:.6f}")
+        return total_perim
