@@ -127,6 +127,9 @@ class Facet:
         return sum(self.vertexes, R3(0.0, 0.0, 0.0)) * \
             (1.0 / len(self.vertexes))
 
+    def orig_center(self):
+        return sum(self.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(self.orig_vertexes))
+
     def proj_perimeter(self):
         p = 0.0
         for e in self.edges:
@@ -215,7 +218,8 @@ class Polyedr:
             # Проверяем, что все рёбра грани полностью невидимы
             if all(e.visibility() == "not_seen" for e in facet.edges):
                 # Центр грани считаем по ИСХОДНЫМ координатам (до гомотетии и поворота)
-                c = sum(facet.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(facet.orig_vertexes))
+                c = facet.orig_center()
+                #c = sum(facet.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(facet.orig_vertexes))
 
                 # Проверка строгого попадания в сферу радиуса 2 (r^2 < 4)
                 if c.dot(c) < 4.0:
