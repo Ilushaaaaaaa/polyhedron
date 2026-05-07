@@ -80,10 +80,7 @@ class Edge:
         x = - f0 / (f1 - f0)
         return Segment(Edge.SBEG, x) if f0 < 0.0 else Segment(x, Edge.SFIN)
 
-    @property
     def visibility(self):
-
-
         eps = 1e-9
         visible_len = sum(g.fin - g.beg for g in self.gaps)
 
@@ -216,7 +213,7 @@ class Polyedr:
         total_perim = 0.0
         for facet in self.facets:
             # Проверяем, что все рёбра грани полностью невидимы
-            if all(e.visibility == "not_seen" for e in facet.edges):
+            if all(e.visibility() == "not_seen" for e in facet.edges):
                 # Центр грани считаем по ИСХОДНЫМ координатам (до гомотетии и поворота)
                 c = sum(facet.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(facet.orig_vertexes))
 
