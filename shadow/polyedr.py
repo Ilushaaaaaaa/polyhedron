@@ -150,7 +150,6 @@ class Polyedr:
         # списки вершин, исходных вершин, рёбер и граней полиэдра
         self.vertexes, self.orig_vertexes, self.edges, self.facets = [], [], [], []
         self.edge_map = {}
-        self._shadows_ready = False
 
         # Читаем все строки, убираем пустые, чтобы нумерация не сбивалась
         with open(file) as f:
@@ -196,42 +195,33 @@ class Polyedr:
 
             # задание самой грани (передаём оба списка вершин + рёбра)
             self.facets.append(Facet(facet_verts, orig_facet_verts, facet_edges))
-        self._compute_all_shadows()
-
-    def _compute_all_shadows(self):
-        if self._shadows_ready:
-            return
-        for e in self.edges:
-            # gaps уже инициализированы в Edge.__init__ как [Segment(0.0, 1.0)]
-            for f in self.facets:
-                e.shadow(f)
-        self._shadows_ready = True
-
-    def add_facet_incremental(self, new_facet):
-        self.facets.append(new_facet)
-        # Обновляем существующие рёбра тенью новой грани
-        for e in self.edges:
-            e.shadow(new_facet)
-        self._shadows_ready = True
 
     # Метод изображения полиэдра
     def draw(self, tk):  # pragma: no cover
-        if not self._shadows_ready:
-            self._compute_all_shadows()
         tk.clean()
         for e in self.edges:
+            for f in self.facets:
+                e.shadow(f)
             for s in e.gaps:
                 tk.draw_line(e.r3(s.beg), e.r3(s.fin))
 
     # Метод вычисления требуемой характеристики
     def calc_invisible_faces_perimeter_sum(self):
-        if not self._shadows_ready:
-            self._compute_all_shadows()
+        # 1. Сброс и расчёт теней для всех рёбер
+        for e in self.edges:
+            e.gaps = [Segment(Edge.SBEG, Edge.SFIN)]  # обязательный сброс просветов
+            for f in self.facets:
+                e.shadow(f)
 
         total_perim = 0.0
         for facet in self.facets:
+            # Проверяем, что все рёбра грани полностью невидимы
             if all(e.visibility() == "not_seen" for e in facet.edges):
+                # Центр грани считаем по ИСХОДНЫМ координатам (до гомотетии и поворота)
                 c = facet.orig_center()
+                #c = sum(facet.orig_vertexes, R3(0.0, 0.0, 0.0)) * (1.0 / len(facet.orig_vertexes))
+
+                # Проверка строгого попадания в сферу радиуса 2 (r^2 < 4)
                 if c.dot(c) < 4.0:
                     total_perim += facet.proj_perimeter()
 
