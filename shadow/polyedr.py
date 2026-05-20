@@ -90,11 +90,12 @@ class Edge:
             return "seen"
         return "half_seen"
 
+
 class Facet:
     """ Грань полиэдра """
     # Параметры конструктора: список вершин
 
-    def __init__(self, vertexes, orig_vertexes = None, edges = None):
+    def __init__(self, vertexes, orig_vertexes=None, edges=None):
         self.vertexes = vertexes
         self.orig_vertexes = orig_vertexes if orig_vertexes is not None else []
         self.edges = edges if edges is not None else []
@@ -182,7 +183,8 @@ class Polyedr:
                     self.edges.append(new_edge)
                 facet_edges.append(self.edge_map[key])
 
-            self.facets.append(Facet(facet_verts, orig_facet_verts, facet_edges))
+            self.facets.append(
+                Facet(facet_verts, orig_facet_verts, facet_edges))
 
     # Метод изображения полиэдра
     def draw(self, tk):  # pragma: no cover
